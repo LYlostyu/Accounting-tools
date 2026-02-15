@@ -3,73 +3,112 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>算帳工具</title>
+  <title>當舖算帳工具（現金流 / 損益）</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans TC", sans-serif; margin: 20px; }
-    h1 { margin: 0 0 12px; }
+    h1 { margin: 0 0 10px; }
+    .muted { opacity: 0.7; font-size: 13px; margin-bottom: 10px; line-height: 1.5; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
     input, select, button { padding: 8px 10px; font-size: 14px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; }
     th { background: #f6f6f6; }
-    td.num { text-align: right; }
-    .total { font-size: 18px; font-weight: 700; }
-    .muted { opacity: 0.7; font-size: 13px; }
+    td.num { text-align: right; white-space: nowrap; }
+    .total { font-size: 16px; font-weight: 800; }
     button { cursor: pointer; }
     .danger { background: #fff; border: 1px solid #f0b4b4; }
     .primary { background: #111; color: #fff; border: 1px solid #111; }
     .ghost { background: #fff; border: 1px solid #ddd; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #ddd; border-radius:999px; font-size:12px; }
+    .gridSummary { display:grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+    .card { border:1px solid #ddd; border-radius: 12px; padding: 10px 12px; }
+    .card .k { font-size:12px; opacity:.7; }
+    .card .v { font-size:18px; font-weight:800; margin-top:4px; }
   </style>
 </head>
 <body>
-  <h1>算帳工具</h1>
-  <div class="muted">新增明細後匯出 XLSX。</div>
+  <h1>當舖台帳 🧾🔐</h1>
+  <div class="muted">
+    規則：每 30 日 1 期，單利 <span class="pill">4% / 期</span>。<br/>
+    期數算法：<b>期數 = floor(天數/30) + (天數%30 &gt; 15 ? 1 : 0)</b>（不足 30 天「過半」才進位）。<br/>
+    贖回日期可空白：空白時用「今天」估算<b>未實現損益</b>與<b>應收帳款</b>。
+  </div>
 
   <div class="row">
     <label>檔名：
-      <input id="filename" value="ledger" style="width: 140px" />
+      <input id="filename" value="pawn_ledger" style="width: 160px" />
     </label>
+
     <label>幣別：
       <select id="currency">
+        <option value="TWD">TWD</option>
         <option value="MMK">MMK</option>
+        <option value="THB">THB</option>
         <option value="USD">USD</option>
       </select>
     </label>
-    <button class="ghost" id="addRowBtn">+ 新增一列</button>
+
+    <label>利率：
+      <input id="rate" type="number" step="0.01" min="0" value="4" style="width: 80px" />
+      <span class="pill">% / 期(30日)</span>
+    </label>
+
+    <button class="ghost" id="addRowBtn">+ 新增一筆</button>
     <button class="primary" id="exportBtn">匯出 XLSX</button>
     <button class="danger" id="clearBtn">清空</button>
   </div>
 
-  <table id="table">
+  <div class="gridSummary">
+    <div class="card">
+      <div class="k">已發生現金流合計（到目前）</div>
+      <div class="v" id="sumCashflow">0</div>
+    </div>
+    <div class="card">
+      <div class="k">已實現損益（已贖回利息）</div>
+      <div class="v" id="sumRealized">0</div>
+    </div>
+    <div class="card">
+      <div class="k">未實現損益（未贖回應計利息）</div>
+      <div class="v" id="sumUnrealized">0</div>
+    </div>
+    <div class="card">
+      <div class="k">應收帳款（未贖回應收總額）</div>
+      <div class="v" id="sumReceivable">0</div>
+    </div>
+  </div>
+
+  <table>
     <thead>
       <tr>
-        <th style="width: 150px">日期</th>
-        <th>項目</th>
-        <th style="width: 120px">分類</th>
-        <th style="width: 90px">數量</th>
-        <th style="width: 110px">單價</th>
-        <th style="width: 120px">小計</th>
-        <th>備註</th>
-        <th style="width: 70px">操作</th>
+        <th style="width:140px">典當日期</th>
+        <th style="width:140px">贖回日期（可空）</th>
+        <th>當品</th>
+        <th style="width:140px">客戶</th>
+        <th style="width:120px">本金</th>
+        <th style="width:80px">天數</th>
+        <th style="width:80px">期數</th>
+        <th style="width:120px">利息</th>
+        <th style="width:130px">應收總額</th>
+        <th style="width:140px">已發生現金流</th>
+        <th style="width:140px">已實現損益</th>
+        <th style="width:140px">未實現損益</th>
+        <th style="width:140px">應收帳款</th>
+        <th style="width:70px">操作</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
-    <tfoot>
-      <tr>
-        <td colspan="5" class="num total">總計</td>
-        <td class="num total" id="grandTotal">0</td>
-        <td class="total" id="currencyDisplay"></td>
-      </tr>
-    </tfoot>
   </table>
 
-  <!-- SheetJS-->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
     const tbody = document.getElementById('tbody');
-    const grandTotalEl = document.getElementById('grandTotal');
     const currencyEl = document.getElementById('currency');
-    const currencyDisplayEl = document.getElementById('currencyDisplay');
+    const rateEl = document.getElementById('rate');
+
+    const sumCashflowEl = document.getElementById('sumCashflow');
+    const sumRealizedEl = document.getElementById('sumRealized');
+    const sumUnrealizedEl = document.getElementById('sumUnrealized');
+    const sumReceivableEl = document.getElementById('sumReceivable');
 
     function todayISO() {
       const d = new Date();
@@ -79,36 +118,234 @@
       return `${y}-${m}-${day}`;
     }
 
-    function fmt(n) {
-      if (!Number.isFinite(n)) return '0';
-      return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    }
-
     function parseNum(v) {
       const n = Number(String(v).replace(/,/g,'').trim());
       return Number.isFinite(n) ? n : 0;
     }
 
+    function fmt(n) {
+      if (!Number.isFinite(n)) return '0';
+      return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+
+    function daysBetween(d1, d2) {
+      const a = new Date(d1 + 'T00:00:00');
+      const b = new Date(d2 + 'T00:00:00');
+      const ms = b - a;
+      if (!Number.isFinite(ms)) return 0;
+      return Math.max(0, Math.floor(ms / 86400000));
+    }
+
+    // 不足30天：>15 天算 1 期，<=15 天算 0 期
+    // 一般情況：floor(days/30) + (days%30>15 ? 1 : 0)
+    function calcPeriods(days) {
+      if (days <= 0) return 0;
+      const full = Math.floor(days / 30);
+      const rem = days % 30;
+      return full + (rem > 15 ? 1 : 0);
+    }
+
     function recalc() {
-      let total = 0;
-      [...tbody.querySelectorAll('tr')].forEach(tr => {
-        const qty = parseNum(tr.querySelector('[data-field="qty"]').value);
-        const price = parseNum(tr.querySelector('[data-field="price"]').value);
-        const sub = qty * price;
-        tr.querySelector('[data-field="subtotal"]').textContent = fmt(sub);
-        total += sub;
-      });
       const ccy = currencyEl.value;
-      grandTotalEl.textContent = `${fmt(total)}`;
-      if (currencyDisplayEl) currencyDisplayEl.textContent = ccy;
+      const rate = parseNum(rateEl.value) / 100; // 4 -> 0.04
+      const now = todayISO();
+
+      let sumCashflow = 0;
+      let sumRealized = 0;
+      let sumUnrealized = 0;
+      let sumReceivable = 0;
+
+      [...tbody.querySelectorAll('tr')].forEach(tr => {
+        const pawnDate = tr.querySelector('[data-field="pawnDate"]').value;
+        const redeemDate = tr.querySelector('[data-field="redeemDate"]').value;
+        const principal = parseNum(tr.querySelector('[data-field="principal"]').value);
+
+        // 典當到截止日的利息計算：贖回有填用贖回日，沒填用今天（用於未實現/應收）
+        const endDateForAccrual = redeemDate || now;
+        const days = (pawnDate && endDateForAccrual) ? daysBetween(pawnDate, endDateForAccrual) : 0;
+        const periods = calcPeriods(days);
+
+        const interest = principal * rate * periods; // 單利：本金 * 利率 * 期數
+        const totalDue = principal + interest;
+
+        const isRedeemed = Boolean(redeemDate);
+
+        // 現金流（已發生）：典當先付出去 -本金；若已贖回，再收回 +應收總額
+        const cashflow = (-principal) + (isRedeemed ? totalDue : 0);
+
+        // 已實現損益：只有贖回才算利息收入
+        const realizedPL = isRedeemed ? interest : 0;
+
+        // 未實現損益：未贖回就把「到今天」應計利息放這裡
+        const unrealizedPL = isRedeemed ? 0 : interest;
+
+        // 應收帳款：未贖回才有應收（用到今天的計算）
+        const receivable = isRedeemed ? 0 : totalDue;
+
+        tr.querySelector('[data-field="days"]').textContent = String(days);
+        tr.querySelector('[data-field="periods"]').textContent = String(periods);
+        tr.querySelector('[data-field="interest"]').textContent = fmt(interest);
+        tr.querySelector('[data-field="totalDue"]').textContent = fmt(totalDue);
+
+        tr.querySelector('[data-field="cashflow"]').textContent = fmt(cashflow);
+        tr.querySelector('[data-field="realized"]').textContent = fmt(realizedPL);
+        tr.querySelector('[data-field="unrealized"]').textContent = fmt(unrealizedPL);
+        tr.querySelector('[data-field="receivable"]').textContent = fmt(receivable);
+
+        sumCashflow += cashflow;
+        sumRealized += realizedPL;
+        sumUnrealized += unrealizedPL;
+        sumReceivable += receivable;
+      });
+
+      sumCashflowEl.textContent = `${fmt(sumCashflow)} ${ccy}`;
+      sumRealizedEl.textContent = `${fmt(sumRealized)} ${ccy}`;
+      sumUnrealizedEl.textContent = `${fmt(sumUnrealized)} ${ccy}`;
+      sumReceivableEl.textContent = `${fmt(sumReceivable)} ${ccy}`;
     }
 
     function addRow(data = {}) {
       const tr = document.createElement('tr');
-      const cats = ["租金","薪資","設備","原料","稅金"];
-      const isCustom = data.category && !cats.includes(data.category);
       tr.innerHTML = `
-        <td><input data-field="date" type="date" value="${data.date ?? todayISO()}" /></td>
+        <td><input data-field="pawnDate" type="date" value="${data.pawnDate ?? todayISO()}" /></td>
+        <td><input data-field="redeemDate" type="date" value="${data.redeemDate ?? ''}" /></td>
+        <td><input data-field="item" placeholder="例如：金飾/手機/名錶" value="${data.item ?? ''}" style="width:100%" /></td>
+        <td><input data-field="customer" placeholder="姓名/代號" value="${data.customer ?? ''}" style="width:100%" /></td>
+        <td class="num"><input data-field="principal" type="number" step="0.01" min="0" value="${data.principal ?? 0}" style="width:110px" /></td>
+
+        <td class="num" data-field="days">0</td>
+        <td class="num" data-field="periods">0</td>
+        <td class="num" data-field="interest">0</td>
+        <td class="num" data-field="totalDue">0</td>
+
+        <td class="num" data-field="cashflow">0</td>
+        <td class="num" data-field="realized">0</td>
+        <td class="num" data-field="unrealized">0</td>
+        <td class="num" data-field="receivable">0</td>
+
+        <td><button class="danger" data-action="del">刪除</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      tr.addEventListener('input', recalc);
+      tr.querySelector('[data-action="del"]').addEventListener('click', () => { tr.remove(); recalc(); });
+
+      recalc();
+    }
+
+    function getRows() {
+      const ccy = currencyEl.value;
+      const ratePct = parseNum(rateEl.value);
+      const now = todayISO();
+
+      return [...tbody.querySelectorAll('tr')].map(tr => {
+        const pawnDate = tr.querySelector('[data-field="pawnDate"]').value;
+        const redeemDate = tr.querySelector('[data-field="redeemDate"]').value;
+        const item = tr.querySelector('[data-field="item"]').value.trim();
+        const customer = tr.querySelector('[data-field="customer"]').value.trim();
+        const principal = parseNum(tr.querySelector('[data-field="principal"]').value);
+
+        const endDate = redeemDate || now;
+        const days = (pawnDate && endDate) ? daysBetween(pawnDate, endDate) : 0;
+        const periods = calcPeriods(days);
+
+        const interest = principal * (ratePct/100) * periods;
+        const totalDue = principal + interest;
+
+        const isRedeemed = Boolean(redeemDate);
+        const cashflow = (-principal) + (isRedeemed ? totalDue : 0);
+        const realizedPL = isRedeemed ? interest : 0;
+        const unrealizedPL = isRedeemed ? 0 : interest;
+        const receivable = isRedeemed ? 0 : totalDue;
+
+        return {
+          pawnDate,
+          redeemDate: redeemDate || "",
+          item,
+          customer,
+          principal,
+          days,
+          periods,
+          ratePctPer30Days: ratePct,
+          interest,
+          totalDue,
+          cashflow,
+          realizedPL,
+          unrealizedPL,
+          receivable,
+          currency: ccy,
+          accrualToWhenRedeemEmpty: redeemDate ? "" : now
+        };
+      });
+    }
+
+    function exportXLSX() {
+      const rows = getRows();
+
+      const sheet1 = XLSX.utils.json_to_sheet(rows.map(r => ({
+        典當日期: r.pawnDate,
+        贖回日期: r.redeemDate,
+        當品: r.item,
+        客戶: r.customer,
+        本金: r.principal,
+        天數: r.days,
+        期數: r.periods,
+        "利率(%/期)": r.ratePctPer30Days,
+        利息: r.interest,
+        應收總額: r.totalDue,
+        已發生現金流: r.cashflow,
+        已實現損益: r.realizedPL,
+        未實現損益: r.unrealizedPL,
+        應收帳款: r.receivable,
+        幣別: r.currency,
+        "贖回空白時計算至": r.accrualToWhenRedeemEmpty
+      })));
+
+      const ccy = currencyEl.value;
+      const sum = rows.reduce((acc, r) => {
+        acc.cashflow += r.cashflow;
+        acc.realized += r.realizedPL;
+        acc.unrealized += r.unrealizedPL;
+        acc.receivable += r.receivable;
+        acc.principal += r.principal;
+        acc.count += 1;
+        acc.open += r.redeemDate ? 0 : 1;
+        acc.closed += r.redeemDate ? 1 : 0;
+        return acc;
+      }, { cashflow:0, realized:0, unrealized:0, receivable:0, principal:0, count:0, open:0, closed:0 });
+
+      const sheet2 = XLSX.utils.json_to_sheet([
+        { 指標: "幣別", 值: ccy },
+        { 指標: "案件數", 值: sum.count },
+        { 指標: "未贖回案件數", 值: sum.open },
+        { 指標: "已贖回案件數", 值: sum.closed },
+        { 指標: "", 值: "" },
+        { 指標: "本金合計", 值: sum.principal },
+        { 指標: "已發生現金流合計", 值: sum.cashflow },
+        { 指標: "已實現損益合計", 值: sum.realized },
+        { 指標: "未實現損益合計", 值: sum.unrealized },
+        { 指標: "應收帳款合計", 值: sum.receivable },
+      ]);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, sheet1, "台帳");
+      XLSX.utils.book_append_sheet(wb, sheet2, "彙總");
+
+      const filename = (document.getElementById('filename').value.trim() || 'pawn_ledger') + '.xlsx';
+      XLSX.writeFile(wb, filename);
+    }
+
+    document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+    document.getElementById('exportBtn').addEventListener('click', exportXLSX);
+    document.getElementById('clearBtn').addEventListener('click', () => { tbody.innerHTML = ''; addRow(); recalc(); });
+
+    currencyEl.addEventListener('change', recalc);
+    rateEl.addEventListener('input', recalc);
+
+    addRow();
+  </script>
+</body>
+</html>        <td><input data-field="date" type="date" value="${data.date ?? todayISO()}" /></td>
         <td><input data-field="name" placeholder="例如：午餐/車票/訂閱" value="${data.name ?? ''}" style="width: 90%" /></td>
         <td style="display:flex;gap:6px;align-items:center">
           <select data-field="category">
