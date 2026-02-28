@@ -40,8 +40,7 @@
     </label>
 
     <label>幣別：
-      <select id="currency">
-        <option value="TWD">TWD</option>
+      <select id="currency">  
         <option value="MMK">MMK</option>
         <option value="THB">THB</option>
         <option value="USD">USD</option>
@@ -85,8 +84,8 @@
         <th>當品</th>
         <th style="width:140px">客戶</th>
         <th style="width:120px">本金</th>
-        <th style="width:80px">天數</th>
-        <th style="width:80px">期數</th>
+        <th style="width:40px">天數</th>
+        <th style="width:40px">期數</th>
         <th style="width:120px">利息</th>
         <th style="width:130px">應收總額</th>
         <th style="width:140px">已發生現金流</th>
@@ -209,9 +208,9 @@
       tr.innerHTML = `
         <td><input data-field="pawnDate" type="date" value="${data.pawnDate ?? todayISO()}" /></td>
         <td><input data-field="redeemDate" type="date" value="${data.redeemDate ?? ''}" /></td>
-        <td><input data-field="item" placeholder="例如：金飾/手機/名錶" value="${data.item ?? ''}" style="width:100%" /></td>
-        <td><input data-field="customer" placeholder="姓名/代號" value="${data.customer ?? ''}" style="width:100%" /></td>
-        <td class="num"><input data-field="principal" type="number" step="0.01" min="0" value="${data.principal ?? 0}" style="width:110px" /></td>
+        <td><input data-field="item" placeholder="物品" value="${data.item ?? ''}" style="width:85%" /></td>
+        <td><input data-field="customer" placeholder="姓名/代號" value="${data.customer ?? ''}" style="width:85%" /></td>
+        <td class="num"><input data-field="principal" type="number" step="0.01" min="0" value="${data.principal ?? 0}" style="width:100px" /></td>
 
         <td class="num" data-field="days">0</td>
         <td class="num" data-field="periods">0</td>
@@ -345,122 +344,3 @@
     addRow();
   </script>
 </body>
-</html>        <td><input data-field="date" type="date" value="${data.date ?? todayISO()}" /></td>
-        <td><input data-field="name" placeholder="例如：午餐/車票/訂閱" value="${data.name ?? ''}" style="width: 90%" /></td>
-        <td style="display:flex;gap:6px;align-items:center">
-          <select data-field="category">
-            ${cats.map(c => `
-              <option value="${c}" ${data.category===c ? 'selected' : ''}>${c}</option>
-            `).join('')}
-            <option value="__custom__" ${isCustom ? 'selected' : ''}>自訂</option>
-          </select>
-          <input data-field="categoryCustom" placeholder="自訂分類" value="${isCustom ? data.category : ''}" style="display:${isCustom ? 'inline-block' : 'none'}; width: 100px" />
-        </td>
-        <td class="num"><input data-field="qty" type="number" step="1" min="0" value="${data.qty ?? 1}" style="width: 80px" /></td>
-        <td class="num"><input data-field="price" type="number" step="0.01" min="0" value="${data.price ?? 0}" style="width: 100px" /></td>
-        <td class="num" data-field="subtotal">0</td>
-        <td><input data-field="note" placeholder="..." value="${data.note ?? ''}" style="width: 90%" /></td>
-        <td><button class="danger" data-action="del">刪除</button></td>
-      `;
-      tbody.appendChild(tr);
-
-      // toggle custom-category input visibility
-      const sel = tr.querySelector('[data-field="category"]');
-      const custom = tr.querySelector('[data-field="categoryCustom"]');
-      sel.addEventListener('change', (e) => {
-        if (sel.value === '__custom__') {
-          custom.style.display = 'inline-block';
-          custom.focus();
-        } else {
-          custom.style.display = 'none';
-          custom.value = '';
-        }
-      });
-
-      tr.addEventListener('input', (e) => {
-        const t = e.target;
-        if (t && (t.matches('[data-field="qty"]') || t.matches('[data-field="price"]') || t.matches('[data-field="categoryCustom"]'))) recalc();
-      });
-
-      tr.querySelector('[data-action="del"]').addEventListener('click', () => {
-        tr.remove();
-        recalc();
-      });
-
-      recalc();
-    }
-
-    function getRows() {
-      return [...tbody.querySelectorAll('tr')].map(tr => {
-        const date = tr.querySelector('[data-field="date"]').value;
-        const name = tr.querySelector('[data-field="name"]').value.trim();
-        const sel = tr.querySelector('[data-field="category"]');
-        const customEl = tr.querySelector('[data-field="categoryCustom"]');
-        const category = sel && sel.value === '__custom__' ? (customEl ? customEl.value.trim() : '') : (sel ? sel.value : '');
-        const qty = parseNum(tr.querySelector('[data-field="qty"]').value);
-        const price = parseNum(tr.querySelector('[data-field="price"]').value);
-        const subtotal = qty * price;
-        const note = tr.querySelector('[data-field="note"]').value.trim();
-        return { date, name, category, qty, price, subtotal, note };
-      });
-    }
-
-    function buildSummary(rows) {
-      const byCat = new Map();
-      for (const r of rows) {
-        const k = r.category || "未分類";
-        byCat.set(k, (byCat.get(k) || 0) + r.subtotal);
-      }
-      return [...byCat.entries()]
-        .sort((a,b) => b[1]-a[1])
-        .map(([category, total]) => ({ category, total }));
-    }
-
-    function exportXLSX() {
-      const rows = getRows();
-      const ccy = currencyEl.value;
-
-      // Sheet 1: Details
-      const sheet1 = XLSX.utils.json_to_sheet(rows.map(r => ({
-        日期: r.date,
-        項目: r.name,
-        分類: r.category,
-        數量: r.qty,
-        單價: r.price,
-        小計: r.subtotal,
-        幣別: ccy,
-        備註: r.note
-      })));
-
-      // Sheet 2: Summary
-      const summary = buildSummary(rows);
-      const grand = rows.reduce((s,r) => s + r.subtotal, 0);
-      const sheet2 = XLSX.utils.json_to_sheet([
-        { 欄目: "總筆數", 值: rows.length },
-        { 欄目: "總計", 值: grand, 幣別: ccy },
-        { 欄目: "", 值: "" },
-        { 欄目: "分類彙總", 值: "" },
-        ...summary.map(s => ({ 欄目: s.category, 值: s.total, 幣別: ccy })),
-      ]);
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, sheet1, "明細");
-      XLSX.utils.book_append_sheet(wb, sheet2, "Summary");
-
-      const filename = (document.getElementById('filename').value.trim() || 'ledger') + '.xlsx';
-      XLSX.writeFile(wb, filename);
-    }
-
-    document.getElementById('addRowBtn').addEventListener('click', () => addRow());
-    document.getElementById('exportBtn').addEventListener('click', exportXLSX);
-    document.getElementById('clearBtn').addEventListener('click', () => {
-      tbody.innerHTML = '';
-      addRow();
-      recalc();
-    });
-    currencyEl.addEventListener('change', recalc);
-
-    addRow();
-  </script>
-</body>
-</html>
